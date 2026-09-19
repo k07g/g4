@@ -46,6 +46,7 @@ jobs:
               { pattern: /^ci\//, label: "ci" },
               { pattern: /^perf(ormance)?\//, label: "performance" },
               { pattern: /^build\//, label: "build" },
+              { pattern: /^infra(structure)?\//, label: "infra" },
             ];
 
             const labels = [...new Set(
