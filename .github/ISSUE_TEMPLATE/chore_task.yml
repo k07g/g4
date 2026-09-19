@@ -1,0 +1,41 @@
+name: タスク・雑務
+description: インフラ、CI、リファクタリングなど機能追加/バグ修正以外の作業
+title: "[Task] "
+labels:
+  - chore
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 何を、なぜ行うかを説明してください
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: category
+    attributes:
+      label: 分類(該当するものにチェック)
+      options:
+        - label: インフラ(Terraform, AWSリソースなど)
+        - label: CI/CD
+        - label: リファクタリング
+        - label: テスト
+        - label: ドキュメント
+        - label: その他
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 作業内容・完了条件
+      description: 具体的な作業項目や、完了したと判断できる基準を記載してください
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 確認事項
+      options:
+        - label: 既存のIssueに同じ内容が無いか検索しました
+          required: true
