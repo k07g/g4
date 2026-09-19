@@ -44,3 +44,15 @@ variable "existing_github_oidc_provider_arn" {
   type        = string
   default     = ""
 }
+
+variable "ecr_repository_name" {
+  description = "アプリのDockerイメージを保存するECRリポジトリ名"
+  type        = string
+  default     = "g4"
+}
+
+variable "github_actions_docker_branch" {
+  description = "ECR pushロールをAssumeRoleWithWebIdentityできるブランチ。mainマージ(push)で直接トリガーするワークフロー向けなのでEnvironmentではなくref(ブランチ)ベースで信頼関係を設定する"
+  type        = string
+  default     = "main"
+}
