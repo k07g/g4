@@ -27,10 +27,10 @@ variable "github_repository" {
   default     = "k07g/g4"
 }
 
-variable "github_actions_branch" {
-  description = "dev環境のTerraform applyロールをAssumeRoleWithWebIdentityできるブランチ"
+variable "github_actions_environment" {
+  description = "dev環境のTerraform applyロールをAssumeRoleWithWebIdentityできるGitHub Actions Environment名。ワークフロー側でjobsに`environment:`を指定すると、OIDCトークンのsubクレームはrepo:OWNER/REPO:ref:refs/heads/BRANCHではなくrepo:OWNER/REPO:environment:ENV_NAME形式になるため、ブランチではなくEnvironment名で信頼関係を設定する"
   type        = string
-  default     = "main"
+  default     = "dev"
 }
 
 variable "create_github_oidc_provider" {
