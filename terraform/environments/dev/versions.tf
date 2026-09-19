@@ -8,9 +8,12 @@ terraform {
     }
   }
 
-  # まずはローカルstateで開始する。チームで共有する場合はS3 backend等への
-  # 移行を検討すること(例: bucket/key/region/dynamodb_table を指定)。
-  # backend "s3" {}
+  # CI(GitHub Actions)からterraform applyを実行するため、S3 backendで
+  # stateを永続化する。bucket/key/region/dynamodb_table はこのファイルに
+  # 直書きせず、`terraform init -backend-config=...` で渡す(ローカルでは
+  # backend.hcl、CIでは環境変数/GitHub Actions変数を利用)。
+  # 値の生成方法は ../../bootstrap を参照。
+  backend "s3" {}
 }
 
 provider "aws" {
