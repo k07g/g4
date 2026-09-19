@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: g4
+      POSTGRES_PASSWORD: g4
+      POSTGRES_DB: g4
+    ports:
+      # Host port 5433 avoids clashing with a Postgres instance that may
+      # already be listening on the default 5432 on the host machine.
+      - "5433:5432"
+    volumes:
+      - g4-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U g4 -d g4"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  g4-postgres-data:
