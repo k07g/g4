@@ -1,12 +1,13 @@
 # terraform
 
-dev / sandbox 環境向けのAmazon Cognito(ユーザープール/アプリクライアント)をTerraformで構築する。
+dev / sandbox 環境向けのAmazon Cognito(ユーザープール/アプリクライアント)と、
+アプリのDockerイメージを保存するECRリポジトリをTerraformで構築する。
 
 ## 構成
 
 ```
 terraform/
-  bootstrap/                 # state用S3/DynamoDB、GitHub Actions用OIDC IAMロールを作る(初回のみ手動実行)
+  bootstrap/                 # state用S3/DynamoDB、GitHub Actions用OIDC IAMロール、ECRリポジトリを作る(初回のみ手動実行)
   modules/cognito/           # Cognitoユーザープール+アプリクライアントの再利用可能モジュール
   environments/dev/          # dev環境のエントリーポイント。mainマージ時にCIが自動applyする
   environments/sandbox/      # sandbox環境のエントリーポイント(ローカルから手動運用)
@@ -49,6 +50,8 @@ apply後、以下をGitHubリポジトリの **Settings > Secrets and variables 
 | `AWS_DEV_TERRAFORM_ROLE_ARN` | `terraform output github_actions_role_arn` |
 | `TF_STATE_BUCKET` | `terraform output state_bucket_name` |
 | `TF_STATE_LOCK_TABLE` | `terraform output state_lock_table_name` |
+| `AWS_ECR_PUSH_ROLE_ARN` | `terraform output github_actions_ecr_push_role_arn` |
+| `ECR_REPOSITORY` | `terraform output ecr_repository_name`(既定値 `g4`) |
 | `AWS_REGION` | 任意(未設定時は `ap-northeast-1`) |
 
 `terraform/bootstrap` の `terraform.tfstate` はこのbootstrap自体の管理に必要なので、
@@ -78,7 +81,18 @@ terraform init -backend-config=backend.hcl
 terraform plan
 ```
 
-## 2. sandbox環境: ローカルから手動apply
+## 2. Dockerイメージ: mainマージで自動push
+
+[.github/workflows/docker-publish.yml](../.github/workflows/docker-publish.yml) が、
+`main` ブランチへのpushのうちアプリのソース(`cmd/**`, `internal/**`, `go.mod`,
+`go.sum`, `Dockerfile`)に変更があった場合に、イメージをビルドしECR(bootstrapで
+作成)に `<commit SHA>` タグと `latest` タグでpushする。認証はdevと同様
+GitHub ActionsのOIDCを使うが、`environment:` は指定せず main ブランチへの
+pushを直接信頼するロール(`AWS_ECR_PUSH_ROLE_ARN`)を使う。
+
+手動での再実行は Actions タブから `workflow_dispatch` で可能。
+
+## 3. sandbox環境: ローカルから手動apply
 
 sandboxはローカルstateのまま、これまで通り手動で操作する。
 

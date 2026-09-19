@@ -164,3 +164,106 @@ resource "aws_iam_role_policy" "terraform_ci" {
   role   = aws_iam_role.terraform_ci.id
   policy = data.aws_iam_policy_document.terraform_ci_permissions.json
 }
+
+# --- アプリのDockerイメージ用ECRリポジトリ ---
+
+resource "aws_ecr_repository" "app" {
+  name                 = var.ecr_repository_name
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "terraform"
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "app" {
+  repository = aws_ecr_repository.app.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "直近20件のイメージのみ保持する"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = { type = "expire" }
+      }
+    ]
+  })
+}
+
+# --- GitHub Actions用 ECR pushロール ---
+# main へのpush(マージ)を直接トリガーに使うワークフロー向けなので、
+# terraform_ci ロールとは分け、ブランチ(ref)ベースで信頼関係を設定する。
+
+data "aws_iam_policy_document" "github_actions_docker_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [local.github_oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${var.github_repository}:ref:refs/heads/${var.github_actions_docker_branch}"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ecr_push" {
+  name               = "${var.project_name}-ecr-push"
+  assume_role_policy = data.aws_iam_policy_document.github_actions_docker_trust.json
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "terraform"
+  }
+}
+
+data "aws_iam_policy_document" "ecr_push_permissions" {
+  statement {
+    sid       = "ECRAuth"
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ECRPush"
+    effect = "Allow"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+    ]
+    resources = [aws_ecr_repository.app.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "ecr_push" {
+  name   = "${var.project_name}-ecr-push"
+  role   = aws_iam_role.ecr_push.id
+  policy = data.aws_iam_policy_document.ecr_push_permissions.json
+}
