@@ -8,7 +8,7 @@ dev / sandbox 環境向けのAmazon Cognito(ユーザープール/アプリク�
 
 ```
 terraform/
-  bootstrap/                 # state用S3/DynamoDB、GitHub Actions用OIDC IAMロール、ECRリポジトリを作る(初回のみ手動実行)
+  bootstrap/                 # state用S3、GitHub Actions用OIDC IAMロール、ECRリポジトリを作る(初回のみ手動実行)
   modules/cognito/           # Cognitoユーザープール+アプリクライアントの再利用可能モジュール
   environments/dev/          # dev環境のエントリーポイント。mainマージ時にCIが自動applyする
   environments/sandbox/      # sandbox環境のエントリーポイント(ローカルから手動運用)
@@ -26,10 +26,12 @@ terraform/
 
 ## 0. 初回セットアップ(bootstrap、手動・一度だけ)
 
-dev環境をCIから自動applyするには、事前にTerraform state用のS3バケット/DynamoDBロック
-テーブルと、GitHub ActionsがOIDCでAssumeRoleするためのIAMロールが必要。
-これは`terraform/bootstrap`で構築するが、循環依存(stateを保存する場所自体をTerraformで
-作る)を避けるためローカルstateのまま、AWS管理者権限を持つ人がローカルから一度だけ実行する。
+dev環境をCIから自動applyするには、事前にTerraform state用のS3バケットと、
+GitHub ActionsがOIDCでAssumeRoleするためのIAMロールが必要。stateのロックは
+DynamoDBではなくS3ネイティブロック(`use_lockfile`、Terraform 1.10+)を使うため
+別途ロック用テーブルは不要。これは`terraform/bootstrap`で構築するが、循環依存
+(stateを保存する場所自体をTerraformで作る)を避けるためローカルstateのまま、
+AWS管理者権限を持つ人がローカルから一度だけ実行する。
 
 ```sh
 cd terraform/bootstrap
@@ -50,7 +52,6 @@ apply後、以下をGitHubリポジトリの **Settings > Secrets and variables 
 | --- | --- |
 | `AWS_DEV_TERRAFORM_ROLE_ARN` | `terraform output github_actions_role_arn` |
 | `TF_STATE_BUCKET` | `terraform output state_bucket_name` |
-| `TF_STATE_LOCK_TABLE` | `terraform output state_lock_table_name` |
 | `AWS_ECR_PUSH_ROLE_ARN` | `terraform output github_actions_ecr_push_role_arn` |
 | `ECR_REPOSITORY` | `terraform output ecr_repository_name`(既定値 `g4`) |
 | `AWS_REGION` | 任意(未設定時は `ap-northeast-1`) |
@@ -183,6 +184,6 @@ cd terraform/environments/dev       # または terraform/environments/sandbox
 terraform destroy
 ```
 
-state用のS3バケット/DynamoDBテーブルやOIDC IAMロール自体を破棄する場合は
+state用のS3バケットやOIDC IAMロール自体を破棄する場合は
 `terraform/bootstrap` で `terraform destroy` するが、他環境が同じバケットを
 参照していないことを確認してから実行すること。
