@@ -201,18 +201,51 @@ data "aws_iam_policy_document" "terraform_ci_dev_infra_permissions" {
   }
 
   statement {
+    # DescribeLogGroupsはリスト系操作でありリソースレベル権限をサポート
+    # しない(常にresource "*"が必要)ため、他のlogs操作とは別ステート
+    # メントにする。
+    sid       = "LogsDescribe"
+    effect    = "Allow"
+    actions   = ["logs:DescribeLogGroups"]
+    resources = ["*"]
+  }
+
+  statement {
     sid    = "LogsManagement"
     effect = "Allow"
     actions = [
       "logs:CreateLogGroup",
       "logs:DeleteLogGroup",
-      "logs:DescribeLogGroups",
       "logs:PutRetentionPolicy",
       "logs:TagResource",
       "logs:UntagResource",
       "logs:ListTagsForResource",
     ]
     resources = ["arn:aws:logs:*:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.project_name}-dev*"]
+  }
+
+  statement {
+    # RDS/ECS/ELBをこのアカウントで初めて使う場合、各サービスの
+    # service-linked roleが自動作成される。作成者にiam:CreateServiceLinkedRole
+    # が必要なため、対象サービスに限定して許可する。
+    sid     = "CreateAwsServiceLinkedRoles"
+    effect  = "Allow"
+    actions = ["iam:CreateServiceLinkedRole"]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+    ]
+
+    condition {
+      test     = "StringLike"
+      variable = "iam:AWSServiceName"
+      values = [
+        "rds.amazonaws.com",
+        "ecs.amazonaws.com",
+        "elasticloadbalancing.amazonaws.com",
+      ]
+    }
   }
 
   statement {
