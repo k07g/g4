@@ -61,8 +61,10 @@ resource "aws_dynamodb_table" "terraform_locks" {
 
 # --- GitHub Actions用 OIDC IAMロール ---
 # CIから長期クレデンシャルを使わずAWSを操作できるようにする。
-# 信頼関係は github_repository の github_actions_branch ブランチへの
-# push(= mainマージ)のみに限定する。
+# ワークフロー側のjobsで`environment: dev`を指定しているため、GitHubが
+# 発行するOIDCトークンのsubクレームは repo:OWNER/REPO:ref:refs/heads/BRANCH
+# ではなく repo:OWNER/REPO:environment:ENV_NAME になる。そのため信頼関係も
+# ブランチではなく github_actions_environment (既定: dev) に対して設定する。
 
 data "tls_certificate" "github_actions" {
   count = var.create_github_oidc_provider ? 1 : 0
@@ -100,7 +102,7 @@ data "aws_iam_policy_document" "github_actions_trust" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/${var.github_actions_branch}"]
+      values   = ["repo:${var.github_repository}:environment:${var.github_actions_environment}"]
     }
   }
 }
