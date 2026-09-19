@@ -39,6 +39,10 @@ func main() {
 	}
 	defer database.Close()
 
+	if err := db.Migrate(ctx, database); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
+
 	userRepo := db.NewUserRepository(database)
 	handler := api.NewHandler(provider, userRepo)
 	router := api.NewRouter(handler, api.AuthMiddleware(provider))

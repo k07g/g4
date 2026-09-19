@@ -5,6 +5,10 @@ import "net/http"
 func NewRouter(h *Handler, authMiddleware func(http.Handler) http.Handler) http.Handler {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
 	mux.HandleFunc("POST /auth/signup", h.SignUp)
 	mux.HandleFunc("POST /auth/confirm", h.ConfirmSignUp)
 	mux.HandleFunc("POST /auth/signin", h.SignIn)

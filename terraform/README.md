@@ -1,7 +1,8 @@
 # terraform
 
-dev / sandbox 環境向けのAmazon Cognito(ユーザープール/アプリクライアント)と、
-アプリのDockerイメージを保存するECRリポジトリをTerraformで構築する。
+dev / sandbox 環境向けのAmazon Cognito(ユーザープール/アプリクライアント)、
+アプリのDockerイメージを保存するECRリポジトリ、そしてdev環境のAPIを実際に
+稼働させるVPC/ALB/RDS/ECS FargateをTerraformで構築する。
 
 ## 構成
 
@@ -13,10 +14,10 @@ terraform/
   environments/sandbox/      # sandbox環境のエントリーポイント(ローカルから手動運用)
 ```
 
-| 環境 | state | apply方法 |
-| --- | --- | --- |
-| dev | S3 backend(`bootstrap`で作成) | **mainブランチへのマージ時にGitHub Actionsが自動apply** |
-| sandbox | ローカルファイル | ローカルから手動で `terraform apply` |
+| 環境 | state | apply方法 | 実データ |
+| --- | --- | --- | --- |
+| dev | S3 backend(`bootstrap`で作成) | **mainブランチへのマージ時にGitHub Actionsが自動apply** | Cognito + VPC/ALB/RDS/ECS Fargate(APIが実際に稼働) |
+| sandbox | ローカルファイル | ローカルから手動で `terraform apply` | Cognitoのみ |
 
 ## 前提
 
@@ -81,14 +82,25 @@ terraform init -backend-config=backend.hcl
 terraform plan
 ```
 
-## 2. Dockerイメージ: mainマージで自動push
+## 2. アプリ: mainマージで自動デプロイ(ECR push → ECS更新)
 
-[.github/workflows/docker-publish.yml](../.github/workflows/docker-publish.yml) が、
+[.github/workflows/deploy-dev.yml](../.github/workflows/deploy-dev.yml) が、
 `main` ブランチへのpushのうちアプリのソース(`cmd/**`, `internal/**`, `go.mod`,
-`go.sum`, `Dockerfile`)に変更があった場合に、イメージをビルドしECR(bootstrapで
-作成)に `<commit SHA>` タグと `latest` タグでpushする。認証はdevと同様
-GitHub ActionsのOIDCを使うが、`environment:` は指定せず main ブランチへの
-pushを直接信頼するロール(`AWS_ECR_PUSH_ROLE_ARN`)を使う。
+`go.sum`, `Dockerfile`)に変更があった場合に、以下を自動で行う。
+
+1. イメージをビルドしECR(bootstrapで作成)に `<commit SHA>` タグと `latest` タグでpush
+2. dev環境のECSタスク定義(`g4-dev`)の最新リビジョンを取得し、イメージだけを
+   新しいSHAタグに差し替えて新しいリビジョンを登録
+3. ECSサービス(`g4-dev`)をその新しいリビジョンに更新し、安定するまで待機
+
+認証はdevのTerraform applyと同様GitHub ActionsのOIDCを使うが、`environment:`
+は指定せず main ブランチへのpushを直接信頼するロール(`AWS_ECR_PUSH_ROLE_ARN`。
+ECR pushとECSデプロイの両方の権限を持つ)を使う。
+
+ECSサービス・タスク定義そのもの(CPU/メモリ、ロール、ログ設定、Secrets参照
+など)は `terraform-dev-apply.yml` が管理するが、`aws_ecs_service` の
+`task_definition` は `lifecycle.ignore_changes` で無視しているため、
+このワークフローが登録する新しいリビジョンをTerraform applyが巻き戻すことはない。
 
 手動での再実行は Actions タブから `workflow_dispatch` で可能。
 
@@ -131,6 +143,33 @@ dev・sandbox とも同じ緩めの設定(`modules/cognito` の既定値)を使�
 
 リソース名は `${project_name}-${environment}` で区別されるため、dev と sandbox は
 それぞれ独立したユーザープールとして共存する。
+
+## dev環境のAPIインフラ
+
+dev環境のみ、Cognitoに加えてAPIを実際に稼働させるインフラを構築する。
+
+- VPC(`10.20.0.0/16`)+ 2つのパブリックサブネット。NAT Gatewayは使わず、
+  ALB・ECSタスク・RDSをすべてパブリックサブネットに配置して固定費を抑える
+  (ECSタスクにパブリックIPを付与してECR/Cognitoに直接到達)
+- ALB: AWS提供ドメインでHTTP(80番)公開。独自ドメイン/HTTPSは未設定
+- ECS Fargate: 最小構成(0.25 vCPU / 512MiB)、`desired_count = 1`
+- RDS PostgreSQL(`db.t4g.micro`): `publicly_accessible = false`。
+  ECSサービスのセキュリティグループからの接続のみ許可
+- DBの接続文字列・Cognitoクライアントシークレットはどちらも平文で
+  タスク定義に埋め込まず、Secrets Manager経由でコンテナに注入する
+- マイグレーションは手動psqlではなく、アプリ起動時に自動実行される
+  (`internal/db/migrate.go`。`CREATE ... IF NOT EXISTS` のみなので冪等)
+
+apply後、APIのURLは以下で確認できる。
+
+```sh
+cd terraform/environments/dev
+terraform output api_url
+```
+
+初回applyの時点ではECRにまだイメージが無く、ECSタスクは起動に失敗し続ける
+(想定内)。[.github/workflows/deploy-dev.yml](../.github/workflows/deploy-dev.yml)
+が一度実行されてイメージがpushされると正常化する。
 
 本番相当の環境を作る場合は、`environments/` 配下に `stg` / `prod` などを追加し、
 [modules/cognito](modules/cognito) の変数(MFA必須化、パスワードポリシー強化、

@@ -101,6 +101,15 @@ func signUpConfirmAndSignIn(t *testing.T, router http.Handler, mock sqlmock.Sqlm
 	return resp.AccessToken
 }
 
+func TestHealthz(t *testing.T) {
+	router, _ := newTestServer(t)
+
+	rec := doRequest(t, router, http.MethodGet, "/healthz", nil, "")
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
 func TestSignUp(t *testing.T) {
 	t.Run("success persists the user profile", func(t *testing.T) {
 		router, mock := newTestServer(t)
