@@ -24,6 +24,7 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     # リポジトリの Settings > Environments > dev で必須レビュアーを設定
     # すれば、apply前に手動承認を挟むことも可能(既定では承認不要)。
     environment: dev

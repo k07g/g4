@@ -12,6 +12,7 @@ permissions:
 jobs:
   pr-automation:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: Assign PR author
         uses: actions/github-script@v9
