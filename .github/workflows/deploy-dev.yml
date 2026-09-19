@@ -34,6 +34,7 @@ env:
 jobs:
   build-push-deploy:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
