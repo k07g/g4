@@ -1,0 +1,69 @@
+name: バグ報告
+description: 想定と異なる挙動を報告する
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 概要
+      description: 何が起きているかを簡潔に説明してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 再現できる具体的な手順を記載してください
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する挙動
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の挙動
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 発生環境
+      options:
+        - ローカル(AUTH_PROVIDER=memory)
+        - ローカル(AUTH_PROVIDER=cognito)
+        - dev
+        - sandbox
+        - その他
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: ログ・スクリーンショットなど補足情報
+      description: エラーメッセージやログを貼る場合はコードブロックのまま記載してください
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 確認事項
+      options:
+        - label: 既存のIssueに同じ内容が無いか検索しました
+          required: true
