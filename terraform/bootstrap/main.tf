@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 # --- Terraform state用バックエンド(S3 + DynamoDBロック) ---
 
 resource "aws_s3_bucket" "terraform_state" {
@@ -165,6 +167,102 @@ resource "aws_iam_role_policy" "terraform_ci" {
   policy = data.aws_iam_policy_document.terraform_ci_permissions.json
 }
 
+# dev環境にVPC/ALB/RDS/ECSを構築するための追加権限。cognito-idp:* と同様、
+# このロールはmainブランチのCIワークフローからのみAssumeRoleWithWebIdentity
+# できるため実行経路はCIに限定されるが、IAMロールの作成・PassRoleだけは
+# 権限昇格を防ぐため dev 用の命名規則に一致するロールに限定する。
+data "aws_iam_policy_document" "terraform_ci_dev_infra_permissions" {
+  statement {
+    sid       = "EC2Networking"
+    effect    = "Allow"
+    actions   = ["ec2:*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "RDSManagement"
+    effect    = "Allow"
+    actions   = ["rds:*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ECSManagement"
+    effect    = "Allow"
+    actions   = ["ecs:*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ELBManagement"
+    effect    = "Allow"
+    actions   = ["elasticloadbalancing:*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "LogsManagement"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:DeleteLogGroup",
+      "logs:DescribeLogGroups",
+      "logs:PutRetentionPolicy",
+      "logs:TagResource",
+      "logs:UntagResource",
+      "logs:ListTagsForResource",
+    ]
+    resources = ["arn:aws:logs:*:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.project_name}-dev*"]
+  }
+
+  statement {
+    sid    = "SecretsManagerManagement"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:CreateSecret",
+      "secretsmanager:DeleteSecret",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:PutSecretValue",
+      "secretsmanager:UpdateSecret",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:GetResourcePolicy",
+    ]
+    resources = ["arn:aws:secretsmanager:*:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/dev/*"]
+  }
+
+  statement {
+    sid    = "IAMRoleManagementScoped"
+    effect = "Allow"
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:GetRole",
+      "iam:UpdateRole",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:GetRolePolicy",
+      "iam:ListRolePolicies",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:ListAttachedRolePolicies",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:ListInstanceProfilesForRole",
+      "iam:PassRole",
+    ]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-dev-*"]
+  }
+}
+
+resource "aws_iam_role_policy" "terraform_ci_dev_infra" {
+  name   = "${var.project_name}-dev-terraform-ci-infra"
+  role   = aws_iam_role.terraform_ci.id
+  policy = data.aws_iam_policy_document.terraform_ci_dev_infra_permissions.json
+}
+
 # --- アプリのDockerイメージ用ECRリポジトリ ---
 
 resource "aws_ecr_repository" "app" {
@@ -266,4 +364,35 @@ resource "aws_iam_role_policy" "ecr_push" {
   name   = "${var.project_name}-ecr-push"
   role   = aws_iam_role.ecr_push.id
   policy = data.aws_iam_policy_document.ecr_push_permissions.json
+}
+
+# 同じロールを使って、pushしたイメージをdev環境のECSサービスにデプロイ
+# する(新しいタスク定義リビジョンの登録とサービス更新)。
+data "aws_iam_policy_document" "ecr_push_ecs_deploy_permissions" {
+  statement {
+    sid    = "ECSDeploy"
+    effect = "Allow"
+    actions = [
+      "ecs:DescribeTaskDefinition",
+      "ecs:RegisterTaskDefinition",
+      "ecs:DescribeServices",
+      "ecs:UpdateService",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    # register-task-definitionでタスク実行ロール/タスクロールを渡すために
+    # 必要。devの命名規則に一致するロールのみに限定する。
+    sid       = "PassEcsRoles"
+    effect    = "Allow"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-dev-*"]
+  }
+}
+
+resource "aws_iam_role_policy" "ecr_push_ecs_deploy" {
+  name   = "${var.project_name}-ecr-push-ecs-deploy"
+  role   = aws_iam_role.ecr_push.id
+  policy = data.aws_iam_policy_document.ecr_push_ecs_deploy_permissions.json
 }
