@@ -1,18 +1,18 @@
 # terraform
 
-dev環境向けのAmazon Cognito(ユーザープール/アプリクライアント)をTerraformで構築する。
+dev / sandbox 環境向けのAmazon Cognito(ユーザープール/アプリクライアント)をTerraformで構築する。
 
 ## 構成
 
 ```
 terraform/
-  modules/cognito/        # Cognitoユーザープール+アプリクライアントの再利用可能モジュール
-  environments/dev/        # dev環境のエントリーポイント(モジュールを呼び出す)
+  modules/cognito/          # Cognitoユーザープール+アプリクライアントの再利用可能モジュール
+  environments/dev/          # dev環境のエントリーポイント(モジュールを呼び出す)
+  environments/sandbox/      # sandbox環境のエントリーポイント(モジュールを呼び出す)
 ```
 
 state はまずローカルファイルで管理する構成になっている
-([environments/dev/versions.tf](environments/dev/versions.tf))。チームで共有する場合は
-S3 backend 等への移行を検討すること。
+(各環境の `versions.tf`)。チームで共有する場合は S3 backend 等への移行を検討すること。
 
 ## 前提
 
@@ -21,8 +21,10 @@ S3 backend 等への移行を検討すること。
 
 ## 使い方
 
+対象環境のディレクトリ(`dev` または `sandbox`)で実行する。
+
 ```sh
-cd terraform/environments/dev
+cd terraform/environments/dev       # または terraform/environments/sandbox
 terraform init
 terraform plan
 terraform apply
@@ -43,14 +45,19 @@ terraform output -raw cognito_client_secret   # シークレットなので -raw
 | `cognito_client_id` | `COGNITO_CLIENT_ID` |
 | `cognito_client_secret` | `COGNITO_CLIENT_SECRET` |
 
-## dev環境の設定内容
+## dev / sandbox 環境の設定内容
+
+dev・sandbox とも同じ緩めの設定(`modules/cognito` の既定値)を使う。
 
 - サインインID: メールアドレス(`username_attributes = ["email"]`)
 - 自己サインアップ許可、メール確認コードによる本人確認(Cognito標準メール送信)
 - MFA: 無効
-- パスワードポリシー: 最小8文字、文字種別の制約なし(dev向けに緩和)
+- パスワードポリシー: 最小8文字、文字種別の制約なし(検証しやすいよう緩和)
 - 削除保護: 無効(作り直しやすくするため)
 - アプリクライアント: `generate_secret = true`、`USER_PASSWORD_AUTH` / `REFRESH_TOKEN_AUTH` フローのみ許可
+
+リソース名は `${project_name}-${environment}` で区別されるため、dev と sandbox は
+それぞれ独立したユーザープールとして共存する。
 
 本番相当の環境を作る場合は、`environments/` 配下に `stg` / `prod` などを追加し、
 [modules/cognito](modules/cognito) の変数(MFA必須化、パスワードポリシー強化、
@@ -59,6 +66,6 @@ terraform output -raw cognito_client_secret   # シークレットなので -raw
 ## 破棄
 
 ```sh
-cd terraform/environments/dev
+cd terraform/environments/dev       # または terraform/environments/sandbox
 terraform destroy
 ```
