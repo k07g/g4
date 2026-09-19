@@ -1,6 +1,7 @@
 data "aws_caller_identity" "current" {}
 
-# --- Terraform state用バックエンド(S3 + DynamoDBロック) ---
+# --- Terraform state用バックエンド(S3。ロックはS3ネイティブロックを
+#     使うため別途DynamoDBテーブルは不要) ---
 
 resource "aws_s3_bucket" "terraform_state" {
   bucket = var.state_bucket_name
@@ -42,23 +43,6 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
-}
-
-resource "aws_dynamodb_table" "terraform_locks" {
-  name         = var.state_lock_table_name
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-
-  tags = {
-    Project   = var.project_name
-    ManagedBy = "terraform"
-    Purpose   = "terraform-state-lock"
-  }
 }
 
 # --- GitHub Actions用 OIDC IAMロール ---
@@ -138,17 +122,9 @@ data "aws_iam_policy_document" "terraform_ci_permissions" {
     resources = [aws_s3_bucket.terraform_state.arn]
   }
 
-  statement {
-    sid    = "TerraformStateLock"
-    effect = "Allow"
-    actions = [
-      "dynamodb:GetItem",
-      "dynamodb:PutItem",
-      "dynamodb:DeleteItem",
-      "dynamodb:DescribeTable",
-    ]
-    resources = [aws_dynamodb_table.terraform_locks.arn]
-  }
+  # stateのロックはS3ネイティブロック(use_lockfile)を使う。ロックファイルも
+  # 同じバケット内のオブジェクトなので、上のTerraformStateObjects/
+  # TerraformStateBucketListの権限だけで足り、追加の権限は不要。
 
   statement {
     # dev環境のCognitoユーザープール/アプリクライアントを作成・変更・削除

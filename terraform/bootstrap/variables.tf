@@ -15,12 +15,6 @@ variable "state_bucket_name" {
   type        = string
 }
 
-variable "state_lock_table_name" {
-  description = "Terraform stateロック用DynamoDBテーブル名"
-  type        = string
-  default     = "g4-terraform-locks"
-}
-
 variable "github_repository" {
   description = "GitHub Actions OIDCの信頼対象リポジトリ(\"owner/repo\"形式)"
   type        = string
