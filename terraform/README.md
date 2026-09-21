@@ -155,10 +155,8 @@ dev環境のみ、Cognitoに加えてAPIを実際に稼働させるインフラ�
   配置する(タグ付け規則に依存した自動検出はしない)。NAT Gatewayは使わず、
   ECSタスクにパブリックIPを付与して直接ECR/Cognitoに到達する
   - **ALB・RDSサブネットグループは異なるAZのサブネットが2つ以上必須。**
-    現時点の`dev-vpc`にはパブリックサブネットが1つ(`ap-northeast-1a`)しか
-    ないため、`public_subnet_ids`に2つ目のサブネットIDを追加するまでapplyは
-    失敗する(`validation`ブロックで明示的にエラーになる)。2つ目のサブネットは
-    aws-bootstrap側で作成する予定
+    `public_subnet_ids`にAZの異なるサブネットを2つ未満しか指定していない場合、
+    `validation`ブロックで明示的にエラーになる
 - ALB: AWS提供ドメインでHTTP(80番)公開。独自ドメイン/HTTPSは未設定
 - ECS Fargate: 最小構成(0.25 vCPU / 512MiB)、`desired_count = 1`
 - RDS PostgreSQL(`db.t4g.micro`): `publicly_accessible = false`。
@@ -183,6 +181,44 @@ terraform output api_url
 [modules/cognito](modules/cognito) の変数(MFA必須化、パスワードポリシー強化、
 削除保護有効化など)を環境ごとに上書きすること。CIから自動applyする場合は
 `bootstrap`のIAMロールの信頼ブランチ・権限範囲を環境ごとに分けることを検討する。
+
+## 稼働中インフラを別VPCへ移行する際の教訓
+
+dev環境を独自作成VPCからk07g/aws-bootstrapの既存VPCへ移行した際、
+`vpc_id`/`subnet_ids`を変数化して差し替えるだけでは一発でapplyが
+通らなかった。実際に踏んだ地雷と対処法を記録しておく。
+
+- **ALBは作成後に別VPCへ移動できない。** `subnets`をin-place更新しようとすると
+  `aws_lb_target_group`の`SetSecurityGroups`が
+  `InvalidConfigurationRequest: One or more security groups are invalid`で
+  失敗し続ける。`terraform apply -replace=aws_lb.app`で作り直すしかない
+  (DNS名が変わる点に注意)
+- **RDSのDB Subnet Groupも別VPCのサブネットには変更できない。**
+  `ModifyDBSubnetGroup`が
+  `InvalidParameterValue: The new Subnets are not in the same Vpc as the existing subnet group`
+  で失敗する。`terraform apply -replace=aws_db_subnet_group.this`で作り直す
+  (RDSインスタンス自体もsubnet_group変更につられて作り直しになるため、
+  dev環境のようにデータ消失を許容できる場合のみこの方法を使う)
+- **`vpc_id`変更でforce-replace対象になるリソースには
+  `create_before_destroy`が必須。** `aws_security_group`本体だけでなく、
+  それが参照される`aws_vpc_security_group_ingress_rule` /
+  `egress_rule`(特に`referenced_security_group_id`で別のSGを参照している
+  もの)や`aws_lb_target_group`にも同じ指定が必要。name固定のままだと
+  新旧が名前衝突するので`name`から`name_prefix`に変更する必要もある
+- **それでも解決しない`Error: Cycle`が起こることがある。** 複数の相互参照する
+  セキュリティグループ・ターゲットグループ・VPCの削除が絡む一括planは、
+  `create_before_destroy`を付けてもTerraformのグラフ解決が破綻する場合が
+  ある。その場合は一括applyを諦め、`-target`で段階的に適用する
+  (①新しいSG/ルールだけ作成 → ②新しいターゲットグループ作成 →
+  ③RDS/ALB/ECSサービスを新リソースに切り替え → ④`-target`なしの通常apply
+  で不要になった旧リソース一式を削除)
+- **削除エラー(`DependencyViolation`)の多くはAWS側の非同期クリーンアップの
+  遅延が原因。** RDSの service-managed ENI、ALBのENI、ECS Fargateタスクの
+  ENIはいずれも「論理的に削除された」後もAWS側の解放処理に数分かかることが
+  あり、`DependencyViolation`や`mapped public address(es)`エラーで
+  一時的に失敗する。焦って設定を変更せず、`aws ec2
+  describe-network-interfaces`で実際に残っているENIを確認し、消えるまで
+  待って`apply`をリトライすると解決することが多い
 
 ## 破棄
 
