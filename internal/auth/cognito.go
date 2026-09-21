@@ -148,3 +148,27 @@ func (c *CognitoClient) DeleteUser(ctx context.Context, accessToken string) erro
 	})
 	return err
 }
+
+// ForgotPassword requests that Cognito send a password-reset confirmation
+// code to the user's verified email address.
+func (c *CognitoClient) ForgotPassword(ctx context.Context, email string) error {
+	_, err := c.client.ForgotPassword(ctx, &cognitoidentityprovider.ForgotPasswordInput{
+		ClientId:   aws.String(c.clientID),
+		Username:   aws.String(email),
+		SecretHash: c.secretHash(email),
+	})
+	return err
+}
+
+// ConfirmForgotPassword sets a new password using the code sent by
+// ForgotPassword.
+func (c *CognitoClient) ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error {
+	_, err := c.client.ConfirmForgotPassword(ctx, &cognitoidentityprovider.ConfirmForgotPasswordInput{
+		ClientId:         aws.String(c.clientID),
+		Username:         aws.String(email),
+		ConfirmationCode: aws.String(code),
+		Password:         aws.String(newPassword),
+		SecretHash:       c.secretHash(email),
+	})
+	return err
+}

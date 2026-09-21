@@ -141,6 +141,58 @@ func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// --- Forgot password ---
+
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// ForgotPassword always responds 204 regardless of whether the email is
+// registered or the provider call succeeds. This intentionally avoids
+// leaking account existence through this endpoint, a well-known email
+// enumeration vector for password-reset flows.
+func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Email == "" {
+		writeError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+
+	_ = h.provider.ForgotPassword(r.Context(), req.Email)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Confirm forgot password (reset) ---
+
+type resetPasswordRequest struct {
+	Email       string `json:"email"`
+	Code        string `json:"code"`
+	NewPassword string `json:"new_password"`
+}
+
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Email == "" || req.Code == "" || req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "email, code and new_password are required")
+		return
+	}
+
+	if err := h.provider.ConfirmForgotPassword(r.Context(), req.Email, req.Code, req.NewPassword); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // --- Sign out ---
 
 func (h *Handler) SignOut(w http.ResponseWriter, r *http.Request) {

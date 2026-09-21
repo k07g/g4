@@ -12,6 +12,8 @@ func NewRouter(h *Handler, authMiddleware func(http.Handler) http.Handler) http.
 	mux.HandleFunc("POST /auth/signup", h.SignUp)
 	mux.HandleFunc("POST /auth/confirm", h.ConfirmSignUp)
 	mux.HandleFunc("POST /auth/signin", h.SignIn)
+	mux.HandleFunc("POST /auth/forgot-password", h.ForgotPassword)
+	mux.HandleFunc("POST /auth/reset-password", h.ResetPassword)
 	mux.Handle("POST /auth/signout", authMiddleware(http.HandlerFunc(h.SignOut)))
 	mux.Handle("DELETE /auth/me", authMiddleware(http.HandlerFunc(h.DeleteMe)))
 

@@ -7,6 +7,8 @@ Go + Amazon Cognito + PostgreSQL によるユーザー認証API。
 - サインアップ (`POST /auth/signup`)
 - サインアップ確認 (`POST /auth/confirm`) — Cognito が要求する確認コードの検証
 - サインイン (`POST /auth/signin`)
+- パスワードを忘れた場合のリセットコード送信 (`POST /auth/forgot-password`)
+- パスワードリセットの確定 (`POST /auth/reset-password`)
 - サインアウト (`POST /auth/signout`, 要アクセストークン)
 - アカウント削除 (`DELETE /auth/me`, 要アクセストークン)
 
@@ -79,6 +81,26 @@ Cognito の `sub` に紐づくプロフィール情報のみを保存します�
 ```
 
 レスポンスの `access_token` を以降のリクエストの `Authorization: Bearer <token>` に使用します。
+
+### POST /auth/forgot-password
+
+```json
+{ "email": "user@example.com" }
+```
+
+登録済みのメールアドレスにパスワードリセットコードを送信します。メール
+アドレスが未登録の場合でも常に `204 No Content` を返します(このエンド
+ポイントからアカウントの存在有無が分からないようにするため)。`memory`
+プロバイダではコードは常に `000000` 固定です。
+
+### POST /auth/reset-password
+
+```json
+{ "email": "user@example.com", "code": "123456", "new_password": "..." }
+```
+
+`POST /auth/forgot-password` で送信されたコードと新しいパスワードを指定して、
+パスワードをリセットします。
 
 ### POST /auth/signout
 
