@@ -143,6 +143,77 @@ func TestMemoryProvider_SignOut(t *testing.T) {
 	}
 }
 
+func TestMemoryProvider_ForgotPassword(t *testing.T) {
+	p := NewMemoryProvider()
+
+	if err := p.ForgotPassword(context.Background(), "missing@example.com"); !errors.Is(err, ErrUserNotFound) {
+		t.Errorf("ForgotPassword for unknown user: got %v, want %v", err, ErrUserNotFound)
+	}
+
+	if _, err := p.SignUp(context.Background(), testEmail, testPassword); err != nil {
+		t.Fatalf("SignUp returned error: %v", err)
+	}
+	if err := p.ForgotPassword(context.Background(), testEmail); !errors.Is(err, ErrNotConfirmed) {
+		t.Errorf("ForgotPassword before confirmation: got %v, want %v", err, ErrNotConfirmed)
+	}
+
+	if err := p.ConfirmSignUp(context.Background(), testEmail, memoryFixedConfirmationCode); err != nil {
+		t.Fatalf("ConfirmSignUp returned error: %v", err)
+	}
+	if err := p.ForgotPassword(context.Background(), testEmail); err != nil {
+		t.Errorf("ForgotPassword returned error: %v", err)
+	}
+}
+
+func TestMemoryProvider_ConfirmForgotPassword(t *testing.T) {
+	p := NewMemoryProvider()
+	confirmedUser(t, p)
+
+	t.Run("unknown email is rejected the same as a wrong code", func(t *testing.T) {
+		err := p.ConfirmForgotPassword(context.Background(), "missing@example.com", memoryFixedConfirmationCode, "NewPassw0rd!123")
+		if !errors.Is(err, ErrInvalidCode) {
+			t.Errorf("got %v, want %v", err, ErrInvalidCode)
+		}
+	})
+
+	t.Run("without a pending reset is rejected", func(t *testing.T) {
+		err := p.ConfirmForgotPassword(context.Background(), testEmail, memoryFixedConfirmationCode, "NewPassw0rd!123")
+		if !errors.Is(err, ErrInvalidCode) {
+			t.Errorf("got %v, want %v", err, ErrInvalidCode)
+		}
+	})
+
+	if err := p.ForgotPassword(context.Background(), testEmail); err != nil {
+		t.Fatalf("ForgotPassword returned error: %v", err)
+	}
+
+	t.Run("wrong code is rejected", func(t *testing.T) {
+		err := p.ConfirmForgotPassword(context.Background(), testEmail, "999999", "NewPassw0rd!123")
+		if !errors.Is(err, ErrInvalidCode) {
+			t.Errorf("got %v, want %v", err, ErrInvalidCode)
+		}
+	})
+
+	t.Run("correct code sets the new password and consumes the reset", func(t *testing.T) {
+		const newPassword = "NewPassw0rd!123"
+		if err := p.ConfirmForgotPassword(context.Background(), testEmail, memoryFixedConfirmationCode, newPassword); err != nil {
+			t.Fatalf("ConfirmForgotPassword returned error: %v", err)
+		}
+
+		if _, err := p.SignIn(context.Background(), testEmail, testPassword); !errors.Is(err, ErrInvalidCredentials) {
+			t.Errorf("SignIn with the old password: got %v, want %v", err, ErrInvalidCredentials)
+		}
+		if _, err := p.SignIn(context.Background(), testEmail, newPassword); err != nil {
+			t.Errorf("SignIn with the new password returned error: %v", err)
+		}
+
+		// The reset code must not be reusable.
+		if err := p.ConfirmForgotPassword(context.Background(), testEmail, memoryFixedConfirmationCode, "AnotherPassw0rd!"); !errors.Is(err, ErrInvalidCode) {
+			t.Errorf("reused code: got %v, want %v", err, ErrInvalidCode)
+		}
+	})
+}
+
 func TestMemoryProvider_DeleteUser(t *testing.T) {
 	p := NewMemoryProvider()
 	confirmedUser(t, p)

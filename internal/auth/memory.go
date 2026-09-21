@@ -9,9 +9,10 @@ import (
 )
 
 // memoryFixedConfirmationCode is the confirmation code accepted by
-// MemoryProvider for every sign-up. Since there is no real email delivery
-// in local development, a fixed, documented code lets ConfirmSignUp be
-// exercised deterministically (e.g. from curl or a smoke-test script).
+// MemoryProvider for every sign-up and password reset. Since there is no
+// real email delivery in local development, a fixed, documented code lets
+// ConfirmSignUp/ConfirmForgotPassword be exercised deterministically (e.g.
+// from curl or a smoke-test script).
 const memoryFixedConfirmationCode = "000000"
 
 var (
@@ -41,6 +42,9 @@ type memoryUser struct {
 	email     string
 	password  string
 	confirmed bool
+	// resetCode is set by ForgotPassword and cleared once consumed by a
+	// successful ConfirmForgotPassword. Empty means no reset is pending.
+	resetCode string
 }
 
 func NewMemoryProvider() *MemoryProvider {
@@ -143,6 +147,40 @@ func (m *MemoryProvider) DeleteUser(_ context.Context, accessToken string) error
 			delete(m.tokensToEmail, tok)
 		}
 	}
+	return nil
+}
+
+// ForgotPassword issues a (fixed, local-only) reset code for the user. Like
+// Cognito, a user must be confirmed before they can reset their password.
+func (m *MemoryProvider) ForgotPassword(_ context.Context, email string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.usersByEmail[email]
+	if !ok {
+		return ErrUserNotFound
+	}
+	if !u.confirmed {
+		return ErrNotConfirmed
+	}
+	u.resetCode = memoryFixedConfirmationCode
+	return nil
+}
+
+// ConfirmForgotPassword sets a new password if code matches the pending
+// reset issued by ForgotPassword. An unknown email is reported as the same
+// ErrInvalidCode as a wrong code, so this endpoint can't be used to probe
+// which emails are registered.
+func (m *MemoryProvider) ConfirmForgotPassword(_ context.Context, email, code, newPassword string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.usersByEmail[email]
+	if !ok || u.resetCode == "" || u.resetCode != code {
+		return ErrInvalidCode
+	}
+	u.password = newPassword
+	u.resetCode = ""
 	return nil
 }
 

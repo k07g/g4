@@ -242,6 +242,102 @@ func TestSignIn(t *testing.T) {
 	})
 }
 
+func TestForgotPassword(t *testing.T) {
+	t.Run("missing email is rejected", func(t *testing.T) {
+		router, _ := newTestServer(t)
+		rec := doRequest(t, router, http.MethodPost, "/auth/forgot-password", map[string]string{}, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("unknown email still responds 204, to avoid leaking account existence", func(t *testing.T) {
+		router, _ := newTestServer(t)
+		rec := doRequest(t, router, http.MethodPost, "/auth/forgot-password", map[string]string{
+			"email": "unknown@example.com",
+		}, "")
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusNoContent)
+		}
+	})
+
+	t.Run("registered, confirmed email responds 204", func(t *testing.T) {
+		router, mock := newTestServer(t)
+		expectUserInsert(mock)
+		doRequest(t, router, http.MethodPost, "/auth/signup", map[string]string{
+			"email": testEmail, "password": testPassword,
+		}, "")
+		doRequest(t, router, http.MethodPost, "/auth/confirm", map[string]string{
+			"email": testEmail, "code": testConfirmationCode,
+		}, "")
+
+		rec := doRequest(t, router, http.MethodPost, "/auth/forgot-password", map[string]string{
+			"email": testEmail,
+		}, "")
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusNoContent)
+		}
+	})
+}
+
+func TestResetPassword(t *testing.T) {
+	const newPassword = "NewPassw0rd!123"
+
+	setUpConfirmedUserWithResetRequested := func(t *testing.T) http.Handler {
+		t.Helper()
+		router, mock := newTestServer(t)
+		expectUserInsert(mock)
+		doRequest(t, router, http.MethodPost, "/auth/signup", map[string]string{
+			"email": testEmail, "password": testPassword,
+		}, "")
+		doRequest(t, router, http.MethodPost, "/auth/confirm", map[string]string{
+			"email": testEmail, "code": testConfirmationCode,
+		}, "")
+		doRequest(t, router, http.MethodPost, "/auth/forgot-password", map[string]string{
+			"email": testEmail,
+		}, "")
+		return router
+	}
+
+	t.Run("missing fields are rejected", func(t *testing.T) {
+		router, _ := newTestServer(t)
+		rec := doRequest(t, router, http.MethodPost, "/auth/reset-password", map[string]string{
+			"email": testEmail,
+		}, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("wrong code is rejected", func(t *testing.T) {
+		router := setUpConfirmedUserWithResetRequested(t)
+		rec := doRequest(t, router, http.MethodPost, "/auth/reset-password", map[string]string{
+			"email": testEmail, "code": "999999", "new_password": newPassword,
+		}, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("correct code resets the password", func(t *testing.T) {
+		router := setUpConfirmedUserWithResetRequested(t)
+
+		rec := doRequest(t, router, http.MethodPost, "/auth/reset-password", map[string]string{
+			"email": testEmail, "code": testConfirmationCode, "new_password": newPassword,
+		}, "")
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		rec = doRequest(t, router, http.MethodPost, "/auth/signin", map[string]string{
+			"email": testEmail, "password": newPassword,
+		}, "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("signin with new password: status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestSignOut(t *testing.T) {
 	t.Run("missing authorization header is rejected", func(t *testing.T) {
 		router, _ := newTestServer(t)

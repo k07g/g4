@@ -30,4 +30,11 @@ type Provider interface {
 	SignOut(ctx context.Context, accessToken string) error
 	GetUser(ctx context.Context, accessToken string) (*Identity, error)
 	DeleteUser(ctx context.Context, accessToken string) error
+	// ForgotPassword sends a password-reset confirmation code to the user's
+	// email. Implementations should not distinguish "unknown email" from
+	// "sent" in a way that lets a caller enumerate registered accounts.
+	ForgotPassword(ctx context.Context, email string) error
+	// ConfirmForgotPassword completes a password reset using the code sent
+	// by ForgotPassword.
+	ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error
 }
