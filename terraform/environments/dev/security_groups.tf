@@ -24,6 +24,10 @@ resource "aws_vpc_security_group_ingress_rule" "alb_http" {
   from_port         = 80
   to_port           = 80
   ip_protocol       = "tcp"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_all" {
@@ -31,6 +35,10 @@ resource "aws_vpc_security_group_egress_rule" "alb_all" {
   description       = "Allow all outbound"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_security_group" "ecs_service" {
@@ -56,6 +64,10 @@ resource "aws_vpc_security_group_ingress_rule" "ecs_from_alb" {
   from_port                    = var.container_port
   to_port                      = var.container_port
   ip_protocol                  = "tcp"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_vpc_security_group_egress_rule" "ecs_all" {
@@ -63,6 +75,10 @@ resource "aws_vpc_security_group_egress_rule" "ecs_all" {
   description       = "Allow all outbound (ECR pull, Cognito, RDS)"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_security_group" "rds" {
@@ -88,4 +104,8 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_ecs" {
   from_port                    = 5432
   to_port                      = 5432
   ip_protocol                  = "tcp"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
