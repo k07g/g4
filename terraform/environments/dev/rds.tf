@@ -1,6 +1,6 @@
 resource "aws_db_subnet_group" "this" {
   name       = "${var.project_name}-dev"
-  subnet_ids = aws_subnet.public[*].id
+  subnet_ids = var.public_subnet_ids
 
   tags = {
     Project   = var.project_name

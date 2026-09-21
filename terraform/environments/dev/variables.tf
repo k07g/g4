@@ -10,16 +10,21 @@ variable "project_name" {
   default     = "g4"
 }
 
-variable "vpc_cidr" {
-  description = "dev環境用VPCのCIDR"
+variable "vpc_id" {
+  description = "アプリを配置する既存VPCのID。k07g/aws-bootstrapで作成されたdev-vpcを利用し、このTerraformではVPC自体は作成しない"
   type        = string
-  default     = "10.20.0.0/16"
+  default     = "vpc-065a077399a856916"
 }
 
-variable "public_subnet_cidrs" {
-  description = "パブリックサブネットのCIDR(ALB/ECS/RDSをここに配置し、NAT Gatewayなしで運用する)"
+variable "public_subnet_ids" {
+  description = "ALB/ECS/RDSを配置する既存のパブリックサブネットID(k07g/aws-bootstrap側で作成したもの)。ALBおよびRDSサブネットグループの要件により、異なるAZのサブネットを2つ以上指定する必要がある"
   type        = list(string)
-  default     = ["10.20.0.0/20", "10.20.16.0/20"]
+  default     = ["subnet-0280760eb56c3d720"]
+
+  validation {
+    condition     = length(var.public_subnet_ids) >= 2
+    error_message = "public_subnet_ids には異なるAZのサブネットを2つ以上指定してください(ALB/RDSサブネットグループの要件のため)。"
+  }
 }
 
 variable "container_port" {

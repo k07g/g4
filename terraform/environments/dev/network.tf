@@ -1,67 +1,11 @@
-# NAT Gatewayを使わず、ALB・ECSタスク・RDSをすべてパブリックサブネットに
-# 配置してdev環境の固定費を抑える構成。ECSタスクにはパブリックIPを付与して
-# 直接ECR/Cognitoに到達させ、RDSはpublicly_accessible=falseとセキュリティ
-# グループでECSタスクからの接続のみに限定する。
+# VPC・サブネットはこのTerraformでは作成しない。k07g/aws-bootstrapで
+# 作成された既存のdev-vpc(var.vpc_id)と、そこに用意されたパブリック
+# サブネット(var.public_subnet_ids)をそのまま利用する。サブネットは
+# aws-bootstrap側のタグ付け規則に依存したくないため、データソースでの
+# 自動検出ではなく変数で明示的に指定する方式にしている。
+#
+# data "aws_vpc" はvar.vpc_idの存在を早期に検証する目的で参照する。
 
-resource "aws_vpc" "this" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_support   = true
-  enable_dns_hostnames = true
-
-  tags = {
-    Name      = "${var.project_name}-dev"
-    Project   = var.project_name
-    ManagedBy = "terraform"
-  }
-}
-
-resource "aws_internet_gateway" "this" {
-  vpc_id = aws_vpc.this.id
-
-  tags = {
-    Name      = "${var.project_name}-dev"
-    Project   = var.project_name
-    ManagedBy = "terraform"
-  }
-}
-
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
-resource "aws_subnet" "public" {
-  count = length(var.public_subnet_cidrs)
-
-  vpc_id                  = aws_vpc.this.id
-  cidr_block              = var.public_subnet_cidrs[count.index]
-  availability_zone       = data.aws_availability_zones.available.names[count.index]
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name      = "${var.project_name}-dev-public-${count.index}"
-    Project   = var.project_name
-    ManagedBy = "terraform"
-  }
-}
-
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.this.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.this.id
-  }
-
-  tags = {
-    Name      = "${var.project_name}-dev-public"
-    Project   = var.project_name
-    ManagedBy = "terraform"
-  }
-}
-
-resource "aws_route_table_association" "public" {
-  count = length(aws_subnet.public)
-
-  subnet_id      = aws_subnet.public[count.index].id
-  route_table_id = aws_route_table.public.id
+data "aws_vpc" "this" {
+  id = var.vpc_id
 }

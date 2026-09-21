@@ -149,9 +149,16 @@ dev・sandbox とも同じ緩めの設定(`modules/cognito` の既定値)を使�
 
 dev環境のみ、Cognitoに加えてAPIを実際に稼働させるインフラを構築する。
 
-- VPC(`10.20.0.0/16`)+ 2つのパブリックサブネット。NAT Gatewayは使わず、
-  ALB・ECSタスク・RDSをすべてパブリックサブネットに配置して固定費を抑える
-  (ECSタスクにパブリックIPを付与してECR/Cognitoに直接到達)
+- VPCはこのTerraformでは作成せず、[k07g/aws-bootstrap](https://github.com/k07g/aws-bootstrap)
+  で作成済みの既存VPC(`dev-vpc`、`var.vpc_id`)を利用する。ALB・ECSタスク・
+  RDSは `var.public_subnet_ids` で明示的に指定した既存のパブリックサブネットに
+  配置する(タグ付け規則に依存した自動検出はしない)。NAT Gatewayは使わず、
+  ECSタスクにパブリックIPを付与して直接ECR/Cognitoに到達する
+  - **ALB・RDSサブネットグループは異なるAZのサブネットが2つ以上必須。**
+    現時点の`dev-vpc`にはパブリックサブネットが1つ(`ap-northeast-1a`)しか
+    ないため、`public_subnet_ids`に2つ目のサブネットIDを追加するまでapplyは
+    失敗する(`validation`ブロックで明示的にエラーになる)。2つ目のサブネットは
+    aws-bootstrap側で作成する予定
 - ALB: AWS提供ドメインでHTTP(80番)公開。独自ドメイン/HTTPSは未設定
 - ECS Fargate: 最小構成(0.25 vCPU / 512MiB)、`desired_count = 1`
 - RDS PostgreSQL(`db.t4g.micro`): `publicly_accessible = false`。
