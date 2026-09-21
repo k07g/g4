@@ -1,3 +1,10 @@
+locals {
+  # ses_sender_email が指定されている場合のみ、SES経由のカスタムメール
+  # 送信 (DEVELOPER) + パスワードリセットリンクを埋め込むLambdaを使う。
+  # 空文字の場合はCognito標準送信のままで、コードのみの固定文面になる。
+  use_custom_email = var.ses_sender_email != ""
+}
+
 # アプリはメールアドレスをそのままユーザー名として SignUp / InitiateAuth
 # するため、username_attributes = ["email"] で email をユーザー名として扱う。
 # サインアップ確認は internal/auth の ConfirmSignUp(email, code) 実装に
@@ -32,8 +39,20 @@ resource "aws_cognito_user_pool" "this" {
   }
 
   email_configuration {
-    # dev環境ではSESを構築せず、Cognito標準のメール送信を利用する
-    email_sending_account = "COGNITO_DEFAULT"
+    # ses_sender_email未指定の場合はSESを構築せず、Cognito標準のメール送信
+    # (コードのみの固定文面)を使う。指定された場合のみSES経由のDEVELOPER
+    # 送信に切り替え、Custom Message Lambda (下記) でメール本文を
+    # カスタマイズ(パスワードリセットリンクの埋め込み)できるようにする。
+    email_sending_account = local.use_custom_email ? "DEVELOPER" : "COGNITO_DEFAULT"
+    source_arn            = local.use_custom_email ? aws_ses_email_identity.sender[0].arn : null
+    from_email_address    = local.use_custom_email ? "career-sheet <${var.ses_sender_email}>" : null
+  }
+
+  dynamic "lambda_config" {
+    for_each = local.use_custom_email ? [1] : []
+    content {
+      custom_message = aws_lambda_function.custom_message[0].arn
+    }
   }
 
   verification_message_template {
@@ -43,6 +62,78 @@ resource "aws_cognito_user_pool" "this" {
   deletion_protection = var.deletion_protection ? "ACTIVE" : "INACTIVE"
 
   tags = var.tags
+}
+
+# --- パスワードリセットメールへのリンク埋め込み (ses_sender_email指定時のみ) ---
+
+resource "aws_ses_email_identity" "sender" {
+  count = local.use_custom_email ? 1 : 0
+  email = var.ses_sender_email
+}
+
+# Custom Message Lambda triggerはNode.jsで実装している(lambda/custom-message.js
+# のコメント参照)。archiveプロバイダでソースファイルを直接zip化するだけで
+# デプロイできるため、Goのビルド・別デプロイパイプラインが不要になる。
+data "archive_file" "custom_message" {
+  count       = local.use_custom_email ? 1 : 0
+  type        = "zip"
+  source_file = "${path.module}/lambda/custom-message.js"
+  output_path = "${path.module}/lambda/custom-message.zip"
+}
+
+data "aws_iam_policy_document" "custom_message_trust" {
+  count = local.use_custom_email ? 1 : 0
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "custom_message" {
+  count              = local.use_custom_email ? 1 : 0
+  name               = "${var.project_name}-${var.environment}-cognito-custom-message"
+  assume_role_policy = data.aws_iam_policy_document.custom_message_trust[0].json
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "custom_message_logs" {
+  count      = local.use_custom_email ? 1 : 0
+  role       = aws_iam_role.custom_message[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_lambda_function" "custom_message" {
+  count            = local.use_custom_email ? 1 : 0
+  function_name    = "${var.project_name}-${var.environment}-cognito-custom-message"
+  role             = aws_iam_role.custom_message[0].arn
+  handler          = "custom-message.handler"
+  runtime          = "nodejs24.x"
+  filename         = data.archive_file.custom_message[0].output_path
+  source_code_hash = data.archive_file.custom_message[0].output_base64sha256
+  timeout          = 5
+
+  environment {
+    variables = {
+      FRONTEND_BASE_URL = var.frontend_base_url
+    }
+  }
+
+  tags = var.tags
+}
+
+resource "aws_lambda_permission" "cognito_invoke" {
+  count         = local.use_custom_email ? 1 : 0
+  statement_id  = "AllowCognitoInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.custom_message[0].function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.this.arn
 }
 
 # internal/auth/cognito.go は SignUp/InitiateAuth(USER_PASSWORD_AUTH) を

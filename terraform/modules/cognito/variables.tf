@@ -54,3 +54,31 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "ses_sender_email" {
+  description = <<-EOT
+    パスワードリセットメールの送信元として使う、SES検証済みのメール
+    アドレス。空文字(既定値)の場合はCognito標準のメール送信
+    (COGNITO_DEFAULT、コードのみの固定メール文面)を使い、SES/Lambdaに
+    よるメール本文のカスタマイズ(URL埋め込み)は行わない。
+    指定する場合、事前にそのアドレスでSESのメールアドレス検証を
+    完了させておく必要がある(確認メールのリンクをクリックする)。
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "frontend_base_url" {
+  description = <<-EOT
+    パスワードリセットメールに埋め込むリンクの起点となるフロントエンドの
+    ベースURL (例: https://main.xxxxx.amplifyapp.com)。ses_sender_email
+    を指定する場合は必須。
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.ses_sender_email == "" || var.frontend_base_url != ""
+    error_message = "ses_sender_email を指定する場合は frontend_base_url も指定してください。"
+  }
+}

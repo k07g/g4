@@ -42,6 +42,7 @@ override.tf.json
 .terraformrc
 terraform.rc
 backend.hcl
+terraform/modules/cognito/lambda/*.zip
 
 # Editor/IDE
 # .idea/

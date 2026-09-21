@@ -145,6 +145,34 @@ dev・sandbox とも同じ緩めの設定(`modules/cognito` の既定値)を使�
 リソース名は `${project_name}-${environment}` で区別されるため、dev と sandbox は
 それぞれ独立したユーザープールとして共存する。
 
+## パスワードリセットメールのURL化 (ses_sender_email)
+
+`modules/cognito` の `ses_sender_email` / `frontend_base_url` 変数を指定すると、
+パスワードリセットメールをコードのみの固定文面から、フロントエンド
+(career-sheet)の`/login?email=...&code=...`へのリンクを含む文面に切り替えられる。
+dev環境では既定でこれを有効化しており(`ses_sender_email = "noreply@ea-sys.jp"`)、
+以下の仕組みで実現している。
+
+- Cognitoの`email_configuration.email_sending_account`は、Lambdaで
+  `emailMessage`/`emailSubject`をカスタマイズするために`DEVELOPER`(SES経由)
+  である必要があり、既定の`COGNITO_DEFAULT`では不可(`InvalidLambdaResponseException`
+  になる)
+- `aws_ses_email_identity`で送信元メールアドレスを検証する。**apply後、
+  そのアドレス宛に届くAWSからの確認メールのリンクを手動でクリックする
+  必要がある**(自動化不可)
+- Custom Message Lambda trigger([modules/cognito/lambda/custom-message.js](modules/cognito/lambda/custom-message.js))
+  が`CustomMessage_ForgotPassword`のときだけメール本文を書き換え、それ以外
+  (サインアップ確認コードなど)は素通しする。あえてGoではなくNode.jsで
+  実装しており、archiveプロバイダでソースファイルを直接zip化するだけで
+  デプロイでき、別ビルド・デプロイパイプラインが不要なため
+- **SESは既定でサンドボックスモード**であり、送信元だけでなく**受信側の
+  メールアドレスも事前にSESで検証されていないと届かない**。実際にテスト
+  受信したいメールアドレスがあれば、SESコンソール/CLIで個別に検証するか、
+  AWSに本番アクセスを申請すること
+
+`ses_sender_email = ""`(既定値ではない場合。sandbox環境はこちら)にすると、
+SES/Lambda関連のリソースは一切作成されず、Cognito標準のコードのみメールに戻る。
+
 ## dev環境のAPIインフラ
 
 dev環境のみ、Cognitoに加えてAPIを実際に稼働させるインフラを構築する。

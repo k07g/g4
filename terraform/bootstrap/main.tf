@@ -177,6 +177,21 @@ data "aws_iam_policy_document" "terraform_ci_dev_infra_permissions" {
   }
 
   statement {
+    # パスワードリセットメールのURL化(SES + Custom Message Lambda)に必要。
+    sid       = "SESManagement"
+    effect    = "Allow"
+    actions   = ["ses:*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "LambdaManagement"
+    effect    = "Allow"
+    actions   = ["lambda:*"]
+    resources = ["*"]
+  }
+
+  statement {
     # DescribeLogGroupsはリスト系操作でありリソースレベル権限をサポート
     # しない(常にresource "*"が必要)ため、他のlogs操作とは別ステート
     # メントにする。
