@@ -80,3 +80,15 @@ variable "db_username" {
   type        = string
   default     = "g4"
 }
+
+variable "ses_sender_email" {
+  description = "パスワードリセットメールの送信元として使う、SES検証済みのメールアドレス"
+  type        = string
+  default     = "noreply@ea-sys.jp"
+}
+
+variable "frontend_base_url" {
+  description = "パスワードリセットメールに埋め込むリンクの起点となるフロントエンド(career-sheet)のベースURL"
+  type        = string
+  default     = "https://main.d16g8pb473bhx7.amplifyapp.com"
+}

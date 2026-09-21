@@ -11,6 +11,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 
   # CI(GitHub Actions)からterraform applyを実行するため、S3 backendで
