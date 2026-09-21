@@ -1,7 +1,14 @@
 resource "aws_security_group" "alb" {
-  name        = "${var.project_name}-dev-alb"
+  # vpc_id はforce-new属性のため、VPCを変更するapplyでは一度この
+  # セキュリティグループが作り直される。name固定だと新旧の名前が
+  # 衝突しうるため、create_before_destroyとあわせてname_prefixを使う。
+  name_prefix = "${var.project_name}-dev-alb-"
   description = "Allow inbound HTTP from the internet"
   vpc_id      = data.aws_vpc.this.id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   tags = {
     Name      = "${var.project_name}-dev-alb"
@@ -27,9 +34,13 @@ resource "aws_vpc_security_group_egress_rule" "alb_all" {
 }
 
 resource "aws_security_group" "ecs_service" {
-  name        = "${var.project_name}-dev-ecs-service"
+  name_prefix = "${var.project_name}-dev-ecs-service-"
   description = "ECS service tasks"
   vpc_id      = data.aws_vpc.this.id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   tags = {
     Name      = "${var.project_name}-dev-ecs-service"
@@ -55,9 +66,13 @@ resource "aws_vpc_security_group_egress_rule" "ecs_all" {
 }
 
 resource "aws_security_group" "rds" {
-  name        = "${var.project_name}-dev-rds"
+  name_prefix = "${var.project_name}-dev-rds-"
   description = "RDS PostgreSQL, reachable only from the ECS service"
   vpc_id      = data.aws_vpc.this.id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   tags = {
     Name      = "${var.project_name}-dev-rds"

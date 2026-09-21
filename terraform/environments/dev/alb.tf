@@ -15,11 +15,19 @@ resource "aws_lb" "app" {
 }
 
 resource "aws_lb_target_group" "app" {
-  name        = "${var.project_name}-dev"
+  # vpc_idはforce-new属性のため、VPCを変更するapplyでは作り直しが発生する。
+  # リスナーがtarget_group_arnを参照した状態で古いものを先に消そうとして
+  # 失敗しないよう、create_before_destroyとname_prefix(ELBv2は最大6文字)
+  # を使う。
+  name_prefix = "dev-"
   port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = data.aws_vpc.this.id
   target_type = "ip"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   health_check {
     path                = "/healthz"
