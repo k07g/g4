@@ -1,7 +1,7 @@
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-dev-alb"
   description = "Allow inbound HTTP from the internet"
-  vpc_id      = aws_vpc.this.id
+  vpc_id      = data.aws_vpc.this.id
 
   tags = {
     Name      = "${var.project_name}-dev-alb"
@@ -29,7 +29,7 @@ resource "aws_vpc_security_group_egress_rule" "alb_all" {
 resource "aws_security_group" "ecs_service" {
   name        = "${var.project_name}-dev-ecs-service"
   description = "ECS service tasks"
-  vpc_id      = aws_vpc.this.id
+  vpc_id      = data.aws_vpc.this.id
 
   tags = {
     Name      = "${var.project_name}-dev-ecs-service"
@@ -57,7 +57,7 @@ resource "aws_vpc_security_group_egress_rule" "ecs_all" {
 resource "aws_security_group" "rds" {
   name        = "${var.project_name}-dev-rds"
   description = "RDS PostgreSQL, reachable only from the ECS service"
-  vpc_id      = aws_vpc.this.id
+  vpc_id      = data.aws_vpc.this.id
 
   tags = {
     Name      = "${var.project_name}-dev-rds"
