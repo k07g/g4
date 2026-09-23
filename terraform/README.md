@@ -8,11 +8,17 @@ dev / sandbox 環境向けのAmazon Cognito(ユーザープール/アプリク�
 
 ```
 terraform/
-  bootstrap/                 # state用S3、GitHub Actions用OIDC IAMロール、ECRリポジトリを作る(初回のみ手動実行)
+  bootstrap/
+    dev/                     # dev環境用のstate用S3、GitHub Actions用OIDC IAMロール、ECRリポジトリを作る(初回のみ手動実行)
+    prod/                    # (将来追加予定)prod環境用のbootstrap。dev/と同様の構成だがAWSアカウント/IAMロールの信頼範囲を分離する
   modules/cognito/           # Cognitoユーザープール+アプリクライアントの再利用可能モジュール
   environments/dev/          # dev環境のエントリーポイント。mainマージ時にCIが自動applyする
   environments/sandbox/      # sandbox環境のエントリーポイント(ローカルから手動運用)
 ```
+
+`bootstrap/` はdev/prodなど環境ごとに完全に独立したディレクトリに分ける。
+それぞれ別のAWSアカウント(または同一アカウントでも別のstateバケット/IAMロール)を
+想定しており、環境間でリソースやstateを共有しない。
 
 | 環境 | state | apply方法 | 実データ |
 | --- | --- | --- | --- |
@@ -29,12 +35,12 @@ terraform/
 dev環境をCIから自動applyするには、事前にTerraform state用のS3バケットと、
 GitHub ActionsがOIDCでAssumeRoleするためのIAMロールが必要。stateのロックは
 DynamoDBではなくS3ネイティブロック(`use_lockfile`、Terraform 1.10+)を使うため
-別途ロック用テーブルは不要。これは`terraform/bootstrap`で構築するが、循環依存
+別途ロック用テーブルは不要。これは`terraform/bootstrap/dev`で構築するが、循環依存
 (stateを保存する場所自体をTerraformで作る)を避けるためローカルstateのまま、
 AWS管理者権限を持つ人がローカルから一度だけ実行する。
 
 ```sh
-cd terraform/bootstrap
+cd terraform/bootstrap/dev
 terraform init
 terraform apply \
   -var="state_bucket_name=<グローバルに一意なバケット名>"
@@ -56,8 +62,8 @@ apply後、以下をGitHubリポジトリの **Settings > Secrets and variables 
 | `ECR_REPOSITORY` | `terraform output ecr_repository_name`(既定値 `g4`) |
 | `AWS_REGION` | 任意(未設定時は `ap-northeast-1`) |
 
-`terraform/bootstrap` の `terraform.tfstate` はこのbootstrap自体の管理に必要なので、
-誤って削除しないこと(このディレクトリはめったに変更しない想定)。
+`terraform/bootstrap/dev` の `terraform.tfstate` はこのbootstrap自体の管理に
+必要なので、誤って削除しないこと(このディレクトリはめったに変更しない想定)。
 
 ## 1. dev環境: mainマージで自動apply
 
@@ -207,8 +213,10 @@ terraform output api_url
 
 本番相当の環境を作る場合は、`environments/` 配下に `stg` / `prod` などを追加し、
 [modules/cognito](modules/cognito) の変数(MFA必須化、パスワードポリシー強化、
-削除保護有効化など)を環境ごとに上書きすること。CIから自動applyする場合は
-`bootstrap`のIAMロールの信頼ブランチ・権限範囲を環境ごとに分けることを検討する。
+削除保護有効化など)を環境ごとに上書きすること。あわせて`terraform/bootstrap/`
+配下にもその環境専用のディレクトリ(例: `bootstrap/prod/`)を追加し、
+`bootstrap/dev/`とは別のstateバケット・IAMロールを用意する
+(環境間でstate/権限を共有しないため)。
 
 ## 稼働中インフラを別VPCへ移行する際の教訓
 
@@ -256,5 +264,5 @@ terraform destroy
 ```
 
 state用のS3バケットやOIDC IAMロール自体を破棄する場合は
-`terraform/bootstrap` で `terraform destroy` するが、他環境が同じバケットを
+`terraform/bootstrap/dev` で `terraform destroy` するが、他環境が同じバケットを
 参照していないことを確認してから実行すること。

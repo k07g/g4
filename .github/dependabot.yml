@@ -20,7 +20,7 @@ updates:
 
   # Terraform: required_providers を宣言している各ルートモジュールごとに設定
   - package-ecosystem: "terraform"
-    directory: "/terraform/bootstrap"
+    directory: "/terraform/bootstrap/dev"
     schedule:
       interval: "weekly"
 
