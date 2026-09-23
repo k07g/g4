@@ -13,13 +13,13 @@ variable "project_name" {
 variable "vpc_id" {
   description = "アプリを配置する既存VPCのID。k07g/aws-bootstrapで作成されたdev-vpcを利用し、このTerraformではVPC自体は作成しない"
   type        = string
-  default     = "vpc-065a077399a856916"
+  default     = "vpc-0a2592b4e7e81ff19"
 }
 
 variable "public_subnet_ids" {
   description = "ALB/ECS/RDSを配置する既存のパブリックサブネットID(k07g/aws-bootstrap側で作成したもの)。ALBおよびRDSサブネットグループの要件により、異なるAZのサブネットを2つ以上指定する必要がある"
   type        = list(string)
-  default     = ["subnet-0280760eb56c3d720", "subnet-0a2cab6a3ba59c221"]
+  default     = ["subnet-03e73a9bd84eeac8f", "subnet-0af0bfd34bf41ba93"]
 
   validation {
     condition     = length(var.public_subnet_ids) >= 2
