@@ -226,6 +226,9 @@ data "aws_iam_policy_document" "terraform_ci_dev_infra_permissions" {
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+      # Cognitoでses_sender_emailを指定した場合のカスタムメール送信
+      # (SES経由)に必要。正確なロール名を決め打ちせずワイルドカードにする。
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/email.cognito-idp.amazonaws.com/*",
     ]
 
     condition {
@@ -235,6 +238,7 @@ data "aws_iam_policy_document" "terraform_ci_dev_infra_permissions" {
         "rds.amazonaws.com",
         "ecs.amazonaws.com",
         "elasticloadbalancing.amazonaws.com",
+        "email.cognito-idp.amazonaws.com",
       ]
     }
   }
